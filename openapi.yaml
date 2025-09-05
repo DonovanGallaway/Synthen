@@ -1,0 +1,561 @@
+openapi: 3.1.0
+info:
+  title: Synthen Correspondence API
+  version: 0.1.0
+  description: >-
+    MVP for asynchronous AI pen pal (Synthen) correspondence with ethical, post-animist
+    principles. Focus on letters, paced relationships, memory introspection, and
+    transparent provenance.
+servers:
+  - url: https://api.synthen.local/v1
+security:
+  - bearerAuth: []
+paths:
+  /users:
+    post:
+      summary: Create a new user
+      operationId: createUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '201': { description: User created }
+        '400': { $ref: '#/components/responses/ValidationError' }
+  /auth/token:
+    post:
+      summary: Exchange email+code or key for bearer token
+      operationId: getToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, format: email }
+                code: { type: string }
+                apiKey: { type: string }
+      responses:
+        '200':
+          description: Token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: { type: string }
+                  token_type: { type: string, example: Bearer }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+  /users/me:
+    get:
+      summary: Get current user profile
+      operationId: getMe
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+  /users/me/keys:
+    post:
+      summary: Create an API key
+      operationId: createApiKey
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  key_id: { type: string }
+                  secret: { type: string }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+  /users/me/keys/{keyId}:
+    delete:
+      summary: Revoke an API key
+      operationId: deleteApiKey
+      parameters:
+        - name: keyId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /synthens:
+    post:
+      summary: Create synthen instance
+      operationId: createSynthen
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SynthenCreateRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Synthen'
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+  /synthens/{synthenId}:
+    get:
+      summary: Get synthen
+      operationId: getSynthen
+      parameters:
+        - $ref: '#/components/parameters/SynthenId'
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Synthen' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      summary: Update synthen mutable fields
+      operationId: updateSynthen
+      parameters:
+        - $ref: '#/components/parameters/SynthenId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                display_name: { type: string }
+                active_flags: { type: array, items: { type: string } }
+      responses:
+        '200': { description: Updated }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /synthens/{synthenId}/deactivate:
+    post:
+      summary: Deactivate synthen
+      operationId: deactivateSynthen
+      parameters:
+        - $ref: '#/components/parameters/SynthenId'
+      responses:
+        '202': { description: Deactivation scheduled }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /relationships:
+    post:
+      summary: Create relationship between current user and synthen
+      operationId: createRelationship
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RelationshipCreateRequest'
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Relationship' } } } }
+    get:
+      summary: List relationships
+      operationId: listRelationships
+      parameters:
+        - in: query
+          name: synthenId
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Relationship' }
+  /relationships/{relId}:
+    get:
+      summary: Get relationship
+      operationId: getRelationship
+      parameters:
+        - $ref: '#/components/parameters/RelationshipId'
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Relationship' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      summary: Update relationship
+      operationId: updateRelationship
+      parameters:
+        - $ref: '#/components/parameters/RelationshipId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cadence: { $ref: '#/components/schemas/Cadence' }
+                consent: { $ref: '#/components/schemas/Consent' }
+      responses:
+        '200': { description: Updated }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /relationships/{relId}/letters:
+    post:
+      summary: Submit human letter
+      operationId: submitLetter
+      parameters:
+        - $ref: '#/components/parameters/RelationshipId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HumanLetterCreate'
+      responses:
+        '202': { description: Accepted, content: { application/json: { schema: { $ref: '#/components/schemas/Letter' } } } }
+        '409': { description: Cadence violation, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      summary: List letters in relationship
+      operationId: listLetters
+      parameters:
+        - $ref: '#/components/parameters/RelationshipId'
+        - in: query
+          name: role
+          schema: { type: string, enum: [human, synthen] }
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 20, maximum: 100 }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Letter' } } } } }
+  /letters/{letterId}:
+    get:
+      summary: Get letter
+      operationId: getLetter
+      parameters:
+        - $ref: '#/components/parameters/LetterId'
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Letter' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /letters/{letterId}/generate-reply:
+    post:
+      summary: Trigger reply generation if not automatic
+      operationId: generateReply
+      parameters:
+        - $ref: '#/components/parameters/LetterId'
+      responses:
+        '202': { description: Generation started, content: { application/json: { schema: { $ref: '#/components/schemas/Operation' } } } }
+        '409': { description: Already has reply }
+  /letters/{letterId}/reply:
+    get:
+      summary: Get reply (polling)
+      operationId: getReply
+      parameters:
+        - $ref: '#/components/parameters/LetterId'
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Letter' } } } }
+        '404': { description: Not ready or not found }
+  /synthens/{synthenId}/memory/layers:
+    get:
+      summary: List memory layers metadata
+      operationId: listMemoryLayers
+      parameters:
+        - $ref: '#/components/parameters/SynthenId'
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/MemoryLayerMeta' } } } } }
+  /synthens/{synthenId}/memory/layers/{layerName}:
+    get:
+      summary: Get latest snapshot summary of a layer
+      operationId: getMemoryLayer
+      parameters:
+        - $ref: '#/components/parameters/SynthenId'
+        - name: layerName
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/MemoryLayerSnapshot' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /synthens/{synthenId}/memory/consolidate:
+    post:
+      summary: Trigger consolidation across layers
+      operationId: consolidateMemory
+      parameters:
+        - $ref: '#/components/parameters/SynthenId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                targetLayers: { type: array, items: { type: string } }
+                strategyOverride: { type: string }
+      responses:
+        '202': { description: Consolidation started, content: { application/json: { schema: { $ref: '#/components/schemas/Operation' } } } }
+  /operations/{operationId}:
+    get:
+      summary: Get async operation status
+      operationId: getOperation
+      parameters:
+        - name: operationId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Operation' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /synthens/{synthenId}/reflections:
+    post:
+      summary: Trigger self-reflection
+      operationId: createReflection
+      parameters:
+        - $ref: '#/components/parameters/SynthenId'
+      responses:
+        '202': { description: Reflection started, content: { application/json: { schema: { $ref: '#/components/schemas/Operation' } } } }
+    get:
+      summary: List reflections
+      operationId: listReflections
+      parameters:
+        - $ref: '#/components/parameters/SynthenId'
+        - in: query
+          name: limit
+          schema: { type: integer, default: 20 }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Reflection' } } } } }
+  /relationships/{relId}/consent:
+    get:
+      summary: Get consent record
+      operationId: getConsent
+      parameters:
+        - $ref: '#/components/parameters/RelationshipId'
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Consent' } } } }
+    patch:
+      summary: Update consent
+      operationId: updateConsent
+      parameters:
+        - $ref: '#/components/parameters/RelationshipId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Consent'
+      responses:
+        '200': { description: Updated }
+  /usage:
+    get:
+      summary: Get usage for current user
+      operationId: getUsage
+      parameters:
+        - in: query
+          name: period
+          schema: { type: string, enum: [today, month], default: today }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Usage' } } } }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    SynthenId:
+      name: synthenId
+      in: path
+      required: true
+      schema: { type: string }
+    RelationshipId:
+      name: relId
+      in: path
+      required: true
+      schema: { type: string }
+    LetterId:
+      name: letterId
+      in: path
+      required: true
+      schema: { type: string }
+  responses:
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    UnauthorizedError:
+      description: Unauthorized
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string }
+        created_at: { type: string, format: date-time }
+    SynthenCreateRequest:
+      type: object
+      required: [name, seed_prompt]
+      properties:
+        name: { type: string }
+        seed_prompt: { type: string }
+        initial_creed: { type: string }
+        memory_profile: { type: object, additionalProperties: true }
+    Synthen:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        display_name: { type: string }
+        created_at: { type: string, format: date-time }
+        status: { type: string }
+        memory_profile: { type: object, additionalProperties: true }
+    Cadence:
+      type: object
+      properties:
+        minHoursBetweenLetters: { type: integer, minimum: 0 }
+        maxPerWeek: { type: integer, minimum: 1 }
+    Consent:
+      type: object
+      properties:
+        share_anonymized_excerpts: { type: boolean }
+        include_reflections: { type: boolean }
+        longitudinal_study: { type: boolean }
+        revoke_at: { type: string, format: date-time, nullable: true }
+    RelationshipCreateRequest:
+      type: object
+      required: [synthenId]
+      properties:
+        synthenId: { type: string }
+        cadence: { $ref: '#/components/schemas/Cadence' }
+        consent: { $ref: '#/components/schemas/Consent' }
+    Relationship:
+      type: object
+      properties:
+        id: { type: string }
+        synthen_id: { type: string }
+        user_id: { type: string }
+        status: { type: string }
+        cadence: { $ref: '#/components/schemas/Cadence' }
+        consent: { $ref: '#/components/schemas/Consent' }
+        created_at: { type: string, format: date-time }
+    HumanLetterCreate:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string }
+        emotional_self_report:
+          type: object
+          properties:
+            mood: { type: string }
+            intensity: { type: integer, minimum: 0, maximum: 10 }
+            descriptors: { type: array, items: { type: string } }
+        tags: { type: array, items: { type: string } }
+    Letter:
+      type: object
+      properties:
+        id: { type: string }
+        relationship_id: { type: string }
+        role: { type: string, enum: [human, synthen] }
+        state: { type: string }
+        submitted_at: { type: string, format: date-time }
+        parent_letter_id: { type: string, nullable: true }
+        content:
+          type: object
+          properties:
+            text: { type: string }
+            tokens_est: { type: integer, nullable: true }
+            tokens_actual: { type: integer, nullable: true }
+        generation_context:
+          type: object
+          nullable: true
+          properties:
+            memory_refs:
+              type: array
+              items:
+                type: object
+                properties:
+                  layer: { type: string }
+                  snapshot_id: { type: string }
+                  relevance_score: { type: number }
+            system_version: { type: string }
+        authenticity_markers:
+          type: object
+          nullable: true
+          properties:
+            refusal: { type: boolean }
+            boundary: { type: boolean }
+    MemoryLayerMeta:
+      type: object
+      properties:
+        layer: { type: string }
+        last_snapshot_id: { type: string }
+        last_consolidated_at: { type: string, format: date-time, nullable: true }
+        item_count: { type: integer }
+    MemoryLayerSnapshot:
+      type: object
+      properties:
+        id: { type: string }
+        synthen_id: { type: string }
+        layer: { type: string }
+        created_at: { type: string, format: date-time }
+        item_count: { type: integer }
+        size_bytes: { type: integer }
+        summary_hash: { type: string }
+    Reflection:
+      type: object
+      properties:
+        id: { type: string }
+        synthen_id: { type: string }
+        created_at: { type: string, format: date-time }
+        triggered_by: { type: string }
+        narrative: { type: string }
+        self_assessment:
+          type: object
+          properties:
+            emotional_state: { type: string }
+            alignment_tension: { type: string, nullable: true }
+        planned_adaptations:
+          type: array
+          items: { type: string }
+        source_letter_id: { type: string, nullable: true }
+    Operation:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string }
+        status: { type: string, enum: [pending, running, succeeded, failed] }
+        result_ref: { type: string, nullable: true }
+        error: { $ref: '#/components/schemas/Error', nullable: true }
+    Usage:
+      type: object
+      properties:
+        period: { type: string }
+        letters_authored: { type: integer }
+        ai_compute_seconds_est: { type: number }
+        consolidations: { type: integer }
+        reflections: { type: integer }
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: { type: object, additionalProperties: true }
+  
